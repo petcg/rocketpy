@@ -13,18 +13,37 @@ class REST:
     '''Simple wrapper of Rocket.Chat REST API.
     '''
 
-    def __init__(self, url, token=None):
-        self.token = token
-
-        if token:
-            self.headers = {
-                'Content-type': 'application/json',
+    @classmethod
+    def fromlogin(cls, url, login):
+        '''Login using username/password and return REST object.
+        '''
+        # pylint: disable=W0212
+        rest = cls(url)
+        result = rest.POST('login', **login)
+        if result['status'] == 'success':
+            token = result['data']
+            rest.__headers.update({
                 'X-Auth-Token': token['authToken'],
-                'X-User-Id': token['userId']
-            }
+                'X-User-Id': token['userId'],
+            })
         else:
-            self.headers = {'Content-type': 'application/json'}
+            raise HTTPException(result)
 
+        print('login')
+        return rest
+
+    @classmethod
+    def fromtoken(cls, url, token):
+        '''Return REST object with specified token.
+        '''
+        # pylint: disable=W0212
+        rest = cls(url)
+        rest.__headers.update({
+            'X-Auth-Token': token['authToken'],
+            'X-User-Id': token['userId'],
+        })
+
+    def __init__(self, url):
         result = urlparse(url)
         if result.scheme == 'http':
             connection = HTTPConnection
@@ -33,19 +52,24 @@ class REST:
         else:
             raise ValueError(result.scheme)
 
-        self.conn = connection(result.hostname, result.port)
+        self.__conn = connection(result.hostname, result.port)
+        self.__headers = {'Content-type': 'application/json'}
 
     def __del__(self):
-        if self.token is None:
-            result = self.GET('logout')
-            print(result)
+        try:
+            self.GET('logout')
+        except HTTPException:
+            pass
+        else:
+            print('logout')
 
     def __call(self, method, api, **kwargs):
         '''Calls an API.
         '''
         data = json.dumps(kwargs)
-        self.conn.request(method, '/api/v1/' + api, data, self.headers)
-        response = self.conn.getresponse()
+        conn = self.__conn
+        conn.request(method, '/api/v1/' + api, data, self.__headers)
+        response = conn.getresponse()
 
         if response.status != HTTPStatus.OK:
             # pylint: disable=E1120
@@ -66,14 +90,3 @@ class REST:
         '''
         # pylint: disable=C0103
         return self.__call('GET', api, **kwargs)
-
-    def settoken(self, username, password):
-        '''Sets token to HTTP header.
-        '''
-        result = self.POST('login', username=username, password=password)
-        if result['status'] == 'success':
-            token = result['data']
-            self.headers['X-Auth-Token'] = token['authToken']
-            self.headers['X-User-Id'] = token['userId']
-        else:
-            raise HTTPException(result)
