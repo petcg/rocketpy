@@ -1,2 +1,2 @@
 # rocketpy
-Simple wrapper of Rocket.Chat API
+Simple wrapper of Rocket.Chat API.
